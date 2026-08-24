@@ -15,17 +15,27 @@ const PACIFIC_TIME_ZONE = "America/Los_Angeles";
 export default {
   async scheduled(controller, env, ctx) {
     ctx.waitUntil(
-      monitor(env).catch((error) => {
-        controller.noRetry();
-        console.error("Scheduled monitor failed", error);
-      }),
+      monitor(env)
+        .then(async (result) => {
+          await recordRunState(env, "success", result);
+          console.log("Scheduled monitor completed", JSON.stringify(result));
+        })
+        .catch(async (error) => {
+          await recordRunState(env, "error", { error: safeErrorMessage(error) });
+          console.error("Scheduled monitor failed", error);
+          controller.noRetry();
+          throw error;
+        }),
     );
   },
 
   async fetch(request, env) {
     const url = new URL(request.url);
 
-    if (request.method !== "POST" || url.pathname !== "/run") {
+    if (
+      request.method !== "POST" ||
+      !["/run", "/ai-health"].includes(url.pathname)
+    ) {
       return new Response("Not found", { status: 404 });
     }
 
@@ -37,6 +47,22 @@ export default {
     }
 
     try {
+      if (url.pathname === "/ai-health") {
+        const result = await classifyPost(env, {
+          id: "ai-health-check",
+          text: "We have reset usage limits for all paid Codex users. It is done.",
+          created_at: new Date().toISOString(),
+        });
+        return Response.json({
+          ok: result.aiCalled && result.aiAccepted && !result.aiFallback,
+          aiCalled: result.aiCalled,
+          aiAccepted: result.aiAccepted,
+          aiFallback: result.aiFallback,
+          eventType: result.analysis?.resetType ?? null,
+          status: result.analysis?.announcedAs ?? null,
+        });
+      }
+
       const result = await monitor(env, { smokeTest: true });
       return Response.json(result);
     } catch (error) {
@@ -144,21 +170,14 @@ export async function monitor(env, { smokeTest = false, now = Date.now() } = {})
     await env.STATE.put("last_seen_id", newestId(posts));
   }
 
-  return { ok: true, posts: posts.length, notifications };
-}
-
-async function notifyForPost(env, post) {
-  const classification = await classifyPost(env, post.text);
-  const resetAt = determineResetTimeFromClassification(post.text, post.created_at, classification);
-  const scheduled = classification?.decision === "alert" && classification.status === "scheduled";
-  if (!resetAt && !scheduled) return false;
-
-  const notificationKey = `notified:${post.id}`;
-  if (await env.STATE.get(notificationKey)) return false;
-
-  await sendDiscord(env, buildAlertContent(post, classification, resetAt));
-  await env.STATE.put(notificationKey, "1", { expirationTtl: 60 * 60 * 24 * 90 });
-  return true;
+  return {
+    ok: true,
+    posts: posts.length,
+    notifications,
+    aiCalls,
+    aiAccepted,
+    aiFallbacks,
+  };
 }
 
 function assertSecrets(env) {
