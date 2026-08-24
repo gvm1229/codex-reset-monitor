@@ -26,7 +26,14 @@ Cloudflare Cron (every five minutes)
 - Schedule: `*/5 * * * *` (UTC), running every five minutes. The same minute
   offsets apply in KST.
 - KV binding: `STATE`; it is pinned in `wrangler.jsonc`.
+- Workers AI binding: `AI`; model
+  `@cf/meta/llama-3.1-8b-instruct-fast` is called only for newly retrieved posts.
 - Cloudflare Observability is enabled.
+- Workers AI performs bounded semantic classification with JSON Mode. Its
+  output is advisory: exact source evidence, deterministic time parsing,
+  pending context, freshness, and duplicate policy remain authoritative. Model
+  errors, quota exhaustion, invalid JSON, low confidence, or unsupported time
+  claims fall back to deterministic classification.
 
 ## Source-of-truth and detection rules
 
@@ -34,14 +41,17 @@ Cloudflare Cron (every five minutes)
 - The Worker uses the official X API, never web search, Reddit, blogs, RSS, or
   third-party monitoring summaries.
 - It caches Tibo's numeric user ID, then reads the user timeline using
-  `since_id`; retweets are excluded, and at most 5 posts are requested per
-  check to control X API usage.
-- Each newly returned post is classified by Cloudflare Workers AI using
-  `@cf/meta/llama-3.1-8b-instruct-fast`; empty X API polls never invoke AI.
-- The LLM is a semantic gate only. X remains the source of truth, and the
-  Worker calculates KST timestamps and duplicate prevention deterministically.
-- If Workers AI fails or emits invalid structured output, the previous strict
-  regex logic remains as the safe fallback.
+  `since_id`; retweets are excluded, each page requests at most 5 posts, and
+  all available pages are consumed before the cursor advances so recovery
+  after downtime cannot silently skip posts.
+- Long-form posts use X API v2's `note_tweet.text`. A short-lived KV context
+  connects a Codex rate-limit announcement to a later timing-only follow-up.
+- Usage and banked contexts use independent KV keys. A generic timing-only
+  follow-up is assigned to the newest compatible pending event.
+- Banked-reset credits are not automatic usage-limit resets. They produce a
+  distinct three-line BANKED-reset notification immediately, even if the exact
+  availability time is unknown. A later time clarification produces a second
+  notification explicitly tied to the preceding banked-reset announcement.
 - A post is relevant only when it mentions `Codex`, a usage/rate/quota/limit
   concept, and a reset or increase concept.
 - A notification is sent only for posts created within the preceding hour.
@@ -56,28 +66,16 @@ The Worker must derive an exact reset time in KST:
 - Relative times such as `in N hours` are calculated from the post timestamp.
 - Explicit Pacific times such as `2 PM PT` are converted using
   `America/Los_Angeles`, including DST, then rendered in KST.
-- For a completed reset, never guess its time; only use the X post timestamp
-  or an exact, parseable time expression.
-- A confirmed scheduled reset whose wording provides only an imprecise near-future
-  time (for example, "in a few minutes") is still alert-worthy. The alert must
-  say it is imminent and show the announcement time in KST, rather than invent
-  an exact reset timestamp.
+- If timing is ambiguous, do not notify; never guess.
 
-For a completed reset, Discord content must contain three text lines separated
-by blank lines:
+For a real detection, Discord content must contain exactly three lines. The
+headline must reflect whether the reset is complete or still scheduled:
 
 ```text
-🚨 **Tibo로부터 Codex 리셋 감지!** 🚨
-
+🚨 **Tibo로부터 Codex 리셋 {완료|예정} 감지!** 🚨
 **리셋 시각(KST)**: YYYY-MM-DD HH:mm KST
-
 https://fixupx.com/thsottiaux/status/{post-id}
 ```
-
-For a confirmed imminent reset without an exact time, use the future-tense
-title `Codex 리셋 예정 감지!`, show the announcement time in KST, and say
-`곧 리셋될 예정입니다.` The three text lines must likewise be separated by
-blank lines.
 
 FixupX is a preview-only link. It is not used for discovery, verification, or
 classification. Do not include the X post text or original X link in alerts.
@@ -121,6 +119,9 @@ When changing behavior:
    in output.
 5. Use a protected, temporary test route only when necessary; remove it and
    redeploy immediately after testing.
+6. For live Cron verification, temporarily use `* * * * *` so tests run every
+   minute. After consecutive successful runs establish stability, restore
+   `*/5 * * * *`, redeploy, and verify the final schedule before closing work.
 
 Deleting `node_modules` is safe. The source directory is not needed for the
 already-deployed Worker to keep running, but retain it (or back it up in a
