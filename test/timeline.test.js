@@ -8,7 +8,16 @@ function createEnv(values = new Map()) {
     X_BEARER_TOKEN: "test-only-token",
     DISCORD_WEBHOOK_URL: "https://discord.invalid/webhook",
     AI: {
-      run: async () => ({ response: { decision: "ignore", status: "unclear" } }),
+      run: async () => ({
+        response: {
+          event_type: "other",
+          status: "other",
+          related_pending_event: "none",
+          time_expression: "",
+          evidence: "",
+          confidence: 1,
+        },
+      }),
     },
     STATE: {
       get: async (key) => values.get(key) ?? null,
