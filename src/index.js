@@ -1,5 +1,14 @@
+import { deduplicatePosts } from "./post-utils.js";
+
 const X_USERNAME = "thsottiaux";
 const ONE_HOUR_MS = 60 * 60 * 1000;
+const PENDING_CONTEXT_TTL_MS = 36 * ONE_HOUR_MS;
+const PENDING_USAGE_CONTEXT_KEY = "pending_usage_reset_context";
+const PENDING_BANKED_CONTEXT_KEY = "pending_banked_reset_context";
+const NOTIFICATION_TTL_SECONDS = 60 * 60 * 24 * 90;
+const MAX_TIMELINE_PAGES = 100;
+const AI_MODEL = "@cf/meta/llama-3.1-8b-instruct-fast";
+const AI_CONFIDENCE_THRESHOLD = 0.75;
 const KST_TIME_ZONE = "Asia/Seoul";
 const PACIFIC_TIME_ZONE = "America/Los_Angeles";
 const CLASSIFIER_MODEL = "@cf/meta/llama-3.1-8b-instruct-fast";
@@ -38,12 +47,12 @@ export default {
   },
 };
 
-async function monitor(env, { smokeTest = false } = {}) {
+export async function monitor(env, { smokeTest = false, now = Date.now() } = {}) {
   assertSecrets(env);
 
   const userId = await getUserId(env);
   const lastSeenId = await env.STATE.get("last_seen_id");
-  const posts = await getPosts(env, userId, lastSeenId);
+  const posts = await getPosts(env, userId, lastSeenId, now);
 
   if (smokeTest) {
     await sendDiscord(
@@ -60,7 +69,6 @@ async function monitor(env, { smokeTest = false } = {}) {
     return { ok: true, smokeTest: true, posts: posts.length };
   }
 
-  const now = Date.now();
   const ordered = [...posts].sort((a, b) => Date.parse(a.created_at) - Date.parse(b.created_at));
   let notifications = 0;
 
@@ -113,16 +121,45 @@ async function getUserId(env) {
   return userId;
 }
 
-async function getPosts(env, userId, sinceId) {
-  const url = new URL(`https://api.x.com/2/users/${userId}/tweets`);
-  url.searchParams.set("max_results", "5");
-  url.searchParams.set("tweet.fields", "created_at");
-  url.searchParams.set("exclude", "retweets");
-  if (sinceId) url.searchParams.set("since_id", sinceId);
+async function getPosts(env, userId, sinceId, now) {
+  const posts = [];
+  let paginationToken;
+  const contextCutoff = now - PENDING_CONTEXT_TTL_MS;
 
-  const response = await xFetch(env, url);
-  const payload = await response.json();
-  return payload.data ?? [];
+  for (let page = 0; page < MAX_TIMELINE_PAGES; page += 1) {
+    const url = new URL(`https://api.x.com/2/users/${userId}/tweets`);
+    url.searchParams.set("max_results", "5");
+    url.searchParams.set(
+      "tweet.fields",
+      "created_at,note_tweet,conversation_id,referenced_tweets",
+    );
+    url.searchParams.set("exclude", "retweets");
+    if (sinceId) url.searchParams.set("since_id", sinceId);
+    if (paginationToken) url.searchParams.set("pagination_token", paginationToken);
+
+    const response = await xFetch(env, url);
+    const payload = await response.json();
+    if (payload.errors?.length) {
+      throw new Error(`X API timeline returned errors: ${JSON.stringify(payload.errors).slice(0, 300)}`);
+    }
+
+    const pagePosts = (payload.data ?? []).map((post) => ({
+      ...post,
+      text: post.note_tweet?.text ?? post.text ?? "",
+    }));
+    posts.push(...pagePosts);
+
+    paginationToken = payload.meta?.next_token;
+    const coveredContextWindow = pagePosts.some((post) => {
+      const createdAt = Date.parse(post.created_at);
+      return Number.isFinite(createdAt) && createdAt <= contextCutoff;
+    });
+    if (!paginationToken || coveredContextWindow) return deduplicatePosts(posts);
+  }
+
+  throw new Error(
+    `X timeline exceeded ${MAX_TIMELINE_PAGES * 5} unread posts; cursor was not advanced`,
+  );
 }
 
 async function xFetch(env, url) {

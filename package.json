@@ -4,7 +4,7 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "test": "node --test",
+    "test": "node --test --test-concurrency=1",
     "check": "node --check src/index.js",
     "dev": "wrangler dev",
     "deploy": "wrangler deploy"
