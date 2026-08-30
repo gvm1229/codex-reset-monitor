@@ -1,23 +1,19 @@
 # Tibo Codex monitor
 
-Cloudflare Worker that polls Tibo's official X timeline every five minutes, detects verified
-Codex usage-limit resets or increases, and posts a compact Korean Discord alert.
+Cloudflare Worker that polls Tibo's official X timeline every five minutes,
+detects verified Codex usage-limit resets or increases, and posts a compact
+Korean Discord alert.
 
-This Worker uses Workers AI as a bounded semantic classifier for newly retrieved
-posts. AI output is accepted only when confidence and exact source evidence pass
-validation; deterministic JavaScript remains authoritative for time extraction,
-KST conversion, state, freshness, and duplicate prevention. AI failures fall
-back to the deterministic classifier.
+Meaning and timing are determined locally by deterministic JavaScript. The
+rules cover completed resets, scheduled relative or Pacific times, indirect
+usage renewal, limit increases, BANKED reset credits, and timing-only replies.
+Questions, wishes, negations, personal reset metaphors, and unrelated replies
+are rejected. Cloudflare Workers AI is not used.
 
-The monitor requests the full `note_tweet` field for long-form X posts, follows
-timeline pagination before advancing its cursor, and keeps short-lived KV
-context so a timing-only follow-up can be correlated with a preceding Codex
-rate-limit announcement. Banked-reset credits use their own notification type
-and are never presented as an automatic usage-limit reset.
-
-Usage-reset and banked-reset contexts are stored under independent KV keys. A
-timing-only follow-up is assigned to the newest compatible pending context, so
-an intervening usage event cannot erase a banked-reset announcement.
+The monitor reads complete `note_tweet.text`, paginates before advancing its
+`since_id` cursor, and validates explicit X reply linkage for timing follow-ups.
+Usage and BANKED contexts use independent short-lived KV keys. Per-post markers
+prevent duplicate notifications for 90 days.
 
 ## Required Worker secrets
 
@@ -27,30 +23,36 @@ an intervening usage event cannot erase a banked-reset announcement.
 
 Never commit those values. Configure them with `npx wrangler secret put <NAME>`.
 
-## Deploy
+## Check and deploy
 
 ```powershell
 npm install
-npx wrangler login
+npm run check
+npm test
 npx wrangler deploy
 ```
 
-The Worker configuration pins the `STATE` KV namespace. The first production
-run creates the stored X user ID and cursor. It also records a non-secret
-`monitor_run_state` heartbeat so scheduled X API failures are visible during
-operational diagnosis.
+The pinned `STATE` KV namespace stores only the cached X user ID, timeline
+cursor, short-lived event contexts, and duplicate markers. Successful Cron runs
+do not write a heartbeat, and there is no AI retry queue.
 
-## Alert format
+## Alert contract
 
-Alerts always contain exactly three lines. The first line says either
-`리셋 완료 감지` or `리셋 예정 감지` according to the announcement and the
-derived reset time. The second line is the exact KST reset time, and the third
-line is the FixupX preview URL.
+Every normal reset alert contains exactly three lines:
 
-Banked-reset alerts also contain exactly three lines. An initial announcement
-is sent immediately even when its time is unknown. A later exact-time post
-produces a second alert that explicitly identifies itself as the clarification
-for the previously announced banked reset.
+```text
+🚨 **Tibo로부터 Codex 리셋 {완료|예정} 감지!** 🚨
+**리셋 시각(KST)**: YYYY-MM-DD HH:mm KST
+https://fixupx.com/thsottiaux/status/{post-id}
+```
+
+Completed resets use the official X post timestamp. Relative times are derived
+from that timestamp. Pacific times use `America/Los_Angeles`, including DST,
+and are rendered in KST. Ambiguous timing is never guessed.
+
+BANKED reset credits remain a distinct three-line notification type. An initial
+announcement may state that the time is unknown; a later exact-time reply
+produces a second clarification notification.
 
 ## Smoke test
 
@@ -59,10 +61,5 @@ $token = Read-Host "SMOKE_TEST_TOKEN"
 Invoke-RestMethod -Method Post -Uri "https://<worker>.workers.dev/run" -Headers @{ Authorization = "Bearer $token" }
 ```
 
-The `/run` endpoint is intentionally protected by `SMOKE_TEST_TOKEN` and only
-sends a diagnostic test notification; it never sends a production alert.
-
-`POST /ai-health` uses the same protection and classifies a fixed synthetic
-reset sentence without reading X, writing KV, or sending Discord. It returns
-only aggregate classifier status and is unavailable when `SMOKE_TEST_TOKEN` is
-not configured.
+The protected `/run` endpoint sends a diagnostic message only. It never sends a
+production reset alert.

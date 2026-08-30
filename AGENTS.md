@@ -16,7 +16,7 @@ of the user's PC.
 Cloudflare Cron (every five minutes)
   -> Cloudflare Worker
   -> official X API v2 (Bearer Token)
-  -> Cloudflare Workers AI (new-post semantic classification)
+  -> deterministic JavaScript intent and time classification
   -> Cloudflare KV duplicate/state store
   -> Discord webhook
 ```
@@ -26,14 +26,12 @@ Cloudflare Cron (every five minutes)
 - Schedule: `*/5 * * * *` (UTC), running every five minutes. The same minute
   offsets apply in KST.
 - KV binding: `STATE`; it is pinned in `wrangler.jsonc`.
-- Workers AI binding: `AI`; model
-  `@cf/meta/llama-3.1-8b-instruct-fast` is called only for newly retrieved posts.
 - Cloudflare Observability is enabled.
-- Workers AI performs bounded semantic classification with JSON Mode. Its
-  output is advisory: exact source evidence, deterministic time parsing,
-  pending context, freshness, and duplicate policy remain authoritative. Model
-  errors, quota exhaustion, invalid JSON, low confidence, or unsupported time
-  claims fall back to deterministic classification.
+- Cloudflare Workers AI is not used. `src/classifier.js` deterministically
+  decides relevance, event type, tense, follow-up linkage, and supported
+  equivalent renewal wording; `src/time.js` performs exact time arithmetic.
+- Successful Cron runs do not write a KV heartbeat. Errors are recorded only
+  when they occur, and there is no persistent classification retry queue.
 
 ## Source-of-truth and detection rules
 
@@ -46,14 +44,15 @@ Cloudflare Cron (every five minutes)
   after downtime cannot silently skip posts.
 - Long-form posts use X API v2's `note_tweet.text`. A short-lived KV context
   connects a Codex rate-limit announcement to a later timing-only follow-up.
-- Usage and banked contexts use independent KV keys. A generic timing-only
-  follow-up is assigned to the newest compatible pending event.
+- Usage and banked contexts use independent KV keys. JavaScript selects a
+  compatible context and requires an explicit reply ID to match when present.
 - Banked-reset credits are not automatic usage-limit resets. They produce a
   distinct three-line BANKED-reset notification immediately, even if the exact
   availability time is unknown. A later time clarification produces a second
   notification explicitly tied to the preceding banked-reset announcement.
-- A post is relevant only when it mentions `Codex`, a usage/rate/quota/limit
-  concept, and a reset or increase concept.
+- JavaScript rules recognize explicit resets, increases, supported indirect
+  renewal wording, and timing-only follow-ups. Questions, wishes, negations,
+  personal metaphors, and replies to a different post must not alert.
 - A notification is sent only for posts created within the preceding hour.
 - KV stores `last_seen_id` and per-post notification markers for 90 days to
   prevent duplicate alerts.

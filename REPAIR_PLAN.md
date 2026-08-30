@@ -1,5 +1,7 @@
 # X monitor repair plan — 2026-08-24
 
+> 2026-08-30 갱신: 아래 AI 관련 내용은 과거 출시 기록이다. 현행 구조는 `JS_INTENT_RESTORE_PLAN.md`에 따라 Workers AI와 재시도 큐를 제거하고 결정적 JavaScript 판정으로 복귀했다.
+
 1. Inspect the Worker, tests, configuration, and deployed/logged state to determine why no X posts have been read since 2026-08-13.
 2. Reproduce the supplied real-post cases as deterministic fixtures, including completed resets, relative future resets, banked-reset announcements, and follow-up timing posts.
 3. Strengthen collection/state handling and reset-event correlation so follow-up posts can supply an exact time without treating preliminary announcements as actual resets.
@@ -120,3 +122,53 @@
   to `*/5 * * * *`.
 - The final AI-enabled five-minute deployment is Worker version
   `40fa1176-bfb6-42d1-8c7f-288995562c5d`.
+
+## False-positive incident — 2026-08-24
+
+1. Correlate the two Discord false positives with their official X post text,
+   timestamps, references/conversations, current KV pending contexts, and
+   production classifier counters without exposing credentials or raw secrets.
+2. Reproduce why ordinary replies were classified as banked resets and why the
+   actual propagated usage-reset announcement did not generate the correct
+   alert.
+3. Require reset-semantic source evidence before any AI reset classification,
+   reject generic politeness/reply text, and use X reply/quote context rather
+   than a stale global event whenever available.
+4. Preserve the intended two-stage banked-reset flow while preventing unrelated
+   replies from consuming or inheriting banked context.
+5. Add regression fixtures for all posts shown in the screenshots, run focused
+   and full verification, upload a numbered non-production version, and report
+   the exact stable-deployment approval needed.
+
+### Findings and repair
+
+- Official X conversation inspection confirmed that root post
+  `2091688655828246890` announced a propagated usage reset. Reply
+  `2091709346371838240` said business-account propagation would finish in five
+  minutes, while `2091709537451687948` was only the social reply `Any time`.
+- Production KV proved the bug: `pending_banked_reset_context` had been
+  overwritten with the `Any time` post ID. The poisoned derived key was deleted
+  and a remote read confirmed `404 Not Found`.
+- The classifier previously required only an exact evidence substring; it did
+  not require that evidence to contain reset semantics or match the X
+  conversation. The monitor also requested `conversation_id` and
+  `referenced_tweets` but did not use them.
+- X expansion text and conversation IDs now feed both classification and
+  validation. Usage and banked contexts retain their conversation ID and remain
+  available for verified follow-ups instead of being cleared immediately.
+- A banked classification now requires explicit banked wording, a compatible
+  banked conversation continuation, or an explicit reset-timing follow-up.
+  Generic acknowledgements cannot create or overwrite banked context.
+- `Reset has been propagated` is a completed usage reset. A same-conversation
+  `still propagating ... done in 5 minutes` reply is a scheduled usage reset
+  with an exact post-time-plus-five-minutes KST value.
+- Remote Workers AI replay passed all three incident cases: the root resolved
+  to completed usage reset, the business reply to scheduled usage reset, and
+  `Any time` to no event. JavaScript fallback independently produced the same
+  safe outcomes.
+- Static check, 28 tests, and Wrangler AI/KV binding dry-run pass on Windows.
+- Uploaded non-production Worker version
+  `613f779e-1e9f-4426-81fe-e4d76bba31cc` with preview alias
+  `https://incident-fix-tibo-codex-monitor.hojini1229.workers.dev`; production
+  traffic and the five-minute Cron remain on the previous stable version until
+  explicit approval.
