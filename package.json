@@ -4,8 +4,8 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "test": "node --test --test-concurrency=1",
-    "check": "node --check src/index.js",
+    "test": "node --test --test-concurrency=1 test/logic.test.js test/timeline.test.js",
+    "check": "node --check src/index.js && node --check src/classifier.js && node --check src/time.js",
     "dev": "wrangler dev",
     "deploy": "wrangler deploy"
   },

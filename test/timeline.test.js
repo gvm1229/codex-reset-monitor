@@ -7,18 +7,6 @@ function createEnv(values = new Map()) {
   return {
     X_BEARER_TOKEN: "test-only-token",
     DISCORD_WEBHOOK_URL: "https://discord.invalid/webhook",
-    AI: {
-      run: async () => ({
-        response: {
-          event_type: "other",
-          status: "other",
-          related_pending_event: "none",
-          time_expression: "",
-          evidence: "",
-          confidence: 1,
-        },
-      }),
-    },
     STATE: {
       get: async (key) => values.get(key) ?? null,
       put: async (key, value) => values.set(key, value),
@@ -70,6 +58,7 @@ test("reads full note text and paginates before advancing the cursor", async (t)
   assert.equal(values.get("last_seen_id"), "106");
   assert.equal(requests.length, 2);
   assert.match(requests[0], /note_tweet/);
+  assert.match(requests[0], /expansions=referenced_tweets.id/);
   assert.match(requests[1], /pagination_token=older-page/);
 });
 
