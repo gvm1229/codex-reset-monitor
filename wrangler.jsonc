@@ -4,7 +4,7 @@
   "main": "src/index.js",
   "compatibility_date": "2026-07-15",
   "vars": {
-    "NOTIFICATIONS_ENABLED": "false",
+    "NOTIFICATIONS_ENABLED": "true",
     "DISCORD_TEST_ENABLED": "false",
     "MONITOR_NAMESPACE": "codex-reset:v1:production",
     "SOURCE_CONTACT_URL": "https://tibo-codex-monitor.hojini1229.workers.dev"

@@ -2,9 +2,9 @@
 
 codex-reset.com의 공개 사건 목록을 5분마다 확인해 **리셋 발표·사용량 확대·저장형 리셋권 안내**를 한국어 Discord 메시지로 전달하는 Cloudflare Worker다. 사용자 PC가 꺼져 있어도 클라우드에서 실행한다.
 
-소스 버전은 **0.8**이다. npm 표기는 `0.8.0`이며 `src/version.js`가 정본이다. 이번 변경은 시험판이며 운영 전환은 별도 승인이 필요하다. 기존 운영 0.7과 분리된 시험판은 `wrangler.preview.jsonc`를 사용한다.
+운영 버전은 **0.8**이다. npm 표기는 `0.8.0`이며 `src/version.js`가 정본이다. 2026-09-21 사용자 승인으로 운영에 적용했다. 운영과 분리된 무발송 시험판은 `wrangler.preview.jsonc`를 사용한다.
 
-0.8 구현과 39개 자동 시험, Cloudflare 실제 API 진단, 승인된 Discord 연결 시험 1건을 완료했다. 사용자가 메시지 수신 성공도 확인했다. 아직 운영은 0.7이며, 원격 저장소에 소스를 저장하는 작업은 운영 전환이 아니다.
+0.8 구현과 39개 자동 시험, Cloudflare 실제 API 진단, 승인된 Discord 연결 시험 1건을 완료했다. 사용자가 메시지 수신 성공도 확인했다. 운영 적용 기록은 [0.8 운영 검증](verification/0.8-production.md)에 남긴다.
 
 ## 동작
 
@@ -42,7 +42,7 @@ Durable Object는 같은 감시기의 요청을 한 순서로 처리하고 기�
 
 | 설정 | 기본값과 역할 |
 | --- | --- |
-| `NOTIFICATIONS_ENABLED` | `false`. `true`일 때만 정기 감시가 실제 발송 |
+| `NOTIFICATIONS_ENABLED` | 승인된 운영 설정은 `true`, 시험판은 `false`. `true`일 때만 정기 감시가 실제 발송 |
 | `DISCORD_TEST_ENABLED` | `false`. 별도 실제 연결 시험을 명시적으로 켤 때만 `true` |
 | `MONITOR_NAMESPACE` | 운영·시험판의 저장 이름을 구별 |
 | `SOURCE_CONTACT_URL` | API User-Agent에 넣는 공개 프로젝트·연락 URL |
@@ -107,7 +107,7 @@ node scripts/verify-preview.js
 
 ## 운영 전환
 
-0.8 운영 전환은 별도 명시 승인 후 수행한다. 무조건 `npm run deploy`를 실행하면 안 된다.
+0.8은 사용자 승인으로 운영에 적용했다. 이후 버전의 운영 전환도 해당 버전의 명시 승인 후 수행한다. `npm run deploy`는 실제 발송 설정을 적용하므로 시험 목적으로 사용하면 안 된다.
 
 1. 검증 결과와 실제 Discord 시험 결과를 제시한다. 시험 허락과 운영 전환 허락을 구별한다.
 2. 기존 배포 UUID·비밀 값·KV를 보존하고, 새 SQLite Durable Object 구성과 SOURCE_CONTACT_URL을 확인한다.
