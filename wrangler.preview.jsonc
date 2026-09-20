@@ -1,28 +1,19 @@
 {
   "$schema": "./node_modules/wrangler/config-schema.json",
-  "name": "tibo-codex-monitor",
+  "name": "tibo-codex-monitor-v0-8-preview",
   "main": "src/index.js",
   "compatibility_date": "2026-07-15",
+  "workers_dev": true,
+  "observability": { "enabled": true },
+  "triggers": { "crons": [] },
   "vars": {
     "NOTIFICATIONS_ENABLED": "false",
     "DISCORD_TEST_ENABLED": "false",
-    "MONITOR_NAMESPACE": "codex-reset:v1:production",
+    "MONITOR_NAMESPACE": "codex-reset:v1:preview-0-8",
     "SOURCE_CONTACT_URL": "https://tibo-codex-monitor.hojini1229.workers.dev"
   },
   "durable_objects": {
     "bindings": [{ "name": "MONITOR", "class_name": "MonitorCoordinator" }]
   },
-  "migrations": [{ "tag": "v0-8", "new_sqlite_classes": ["MonitorCoordinator"] }],
-  "observability": {
-    "enabled": true
-  },
-  "triggers": {
-    "crons": ["*/5 * * * *"]
-  },
-  "kv_namespaces": [
-    {
-      "binding": "STATE",
-      "id": "1ab72f1162434a2da404543604377549"
-    }
-  ]
+  "migrations": [{ "tag": "v0-8", "new_sqlite_classes": ["MonitorCoordinator"] }]
 }

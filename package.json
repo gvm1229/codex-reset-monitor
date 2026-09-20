@@ -1,15 +1,18 @@
 {
   "name": "tibo-codex-monitor",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.8.0",
   "type": "module",
   "scripts": {
-    "test": "node --test --test-concurrency=1 test/logic.test.js test/timeline.test.js",
-    "check": "node --check src/index.js && node --check src/classifier.js && node --check src/time.js",
+    "test": "node --test --test-concurrency=1 test/*.test.js",
+    "check": "node scripts/check-version.js && node scripts/check-source.js",
+    "check:live-source": "node scripts/check-live-source.js",
     "dev": "wrangler dev",
     "deploy": "wrangler deploy"
   },
   "devDependencies": {
-    "wrangler": "^4.0.0"
+    "esbuild": "0.28.1",
+    "miniflare": "5.20260918.0-alpha",
+    "wrangler": "4.135.0"
   }
 }

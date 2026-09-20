@@ -1,129 +1,44 @@
-# Tibo Codex Monitor — Project Context
+# Codex Monitor — 프로젝트 지침
 
-## Purpose
+## 목적과 실행
 
-This project is a fully cloud-hosted Cloudflare Worker that monitors the public
-X posts of OpenAI Product Lead Tibo (`@thsottiaux`) for verified announcements
-about OpenAI Codex usage-limit resets or quota/limit increases.
+- 소스 0.8은 `https://codex-reset.com/api/timeline`의 공개 JSON으로 리셋 발표·사용량 확대·저장형 리셋권을 Discord에 알린다.
+- 기존 운영 Worker 이름은 `tibo-codex-monitor`다. PC에 독립적인 Cloudflare 5분 Cron을 유지한다.
+- 0.8은 아직 시험판이다. 운영 적용은 현재 버전별 명시 승인이 필요하다. 기록과 실제 배포 상태를 확인하며 소스 변경을 운영 적용으로 표현하지 않는다.
+- 현재 사용자 지시: **실제 Discord 시험 전에 멈추고 허락을 요청한다.** 시험 전송 허락을 운영 전환 허락으로 확대하지 않는다.
+- 2026-09-21 승인된 연결 시험 1건은 전송·본문 재조회까지 완료했다. 같은 승인을 추가 시험 전송에 재사용하지 않는다. 상세 결과는 `verification/0.8-implementation.md`에 있다.
 
-It was created to replace a local Codex scheduled task. The local task has been
-deleted; this Worker is the only active scheduler and must remain independent
-of the user's PC.
+## 코드·상태 규칙
 
-## Runtime architecture
+- X API·HTML 수집·트윗 본문 의미 판정·시간 문장 해석·LLM을 도입하지 않는다.
+- `src/source.js`: 고정 API, 식별 User-Agent, 10초 제한, 1 MiB 제한, 게시본 신선도.
+- `src/events.js`: 문서화된 필드만 정규화하고 선택. 알 수 없는 필드는 버린다.
+- `src/delivery.js`: 단일 SQLite Durable Object와 순차 처리 대기열. 미발송·실발송·시험 상태는 분리한다.
+- `src/discord.js`: 세 줄·한국어·KST 발표 시각·사이트 출처·미리보기 링크. 원문과 원본 X 링크를 넣지 않는다. mentions 차단.
+- 초기 정상 목록은 과거 알림을 보내지 않는다. reset+announced, boost, credits+알려진 banked_state만 대상이다.
+- 발표 후 1시간 제한. 같은 ID의 상태 전진만 추가 알림하며 편집·역행·삭제 후 재등장으로 보내지 않는다.
+- 실제 리셋 적용 시각·계정 리셋 완료를 추정하지 않는다. 예측·unlock·일반 credits·unknown은 제외한다.
+- 전송 직전 durable attempting 기록, wait=true Discord 응답의 메시지 ID를 영수증으로 기록한다. 불확실한 결과는 자동 재전송 금지.
+- `STATE` KV는 옛 운영의 되돌리기용으로 남겨 두며 새 코드에서 사용하지 않는다. 정상 KV heartbeat 없음.
 
-```text
-Cloudflare Cron (every five minutes)
-  -> Cloudflare Worker
-  -> official X API v2 (Bearer Token)
-  -> deterministic JavaScript intent and time classification
-  -> Cloudflare KV duplicate/state store
-  -> Discord webhook
-```
+## 설정·보안
 
-- Worker: `tibo-codex-monitor`
-- Public Worker URL: `https://tibo-codex-monitor.hojini1229.workers.dev`
-- Schedule: `*/5 * * * *` (UTC), running every five minutes. The same minute
-  offsets apply in KST.
-- KV binding: `STATE`; it is pinned in `wrangler.jsonc`.
-- Cloudflare Observability is enabled.
-- Cloudflare Workers AI is not used. `src/classifier.js` deterministically
-  decides relevance, event type, tense, follow-up linkage, and supported
-  equivalent renewal wording; `src/time.js` performs exact time arithmetic.
-- Successful Cron runs do not write a KV heartbeat. Errors are recorded only
-  when they occur, and there is no persistent classification retry queue.
+- 기본 `NOTIFICATIONS_ENABLED=false`, `DISCORD_TEST_ENABLED=false`를 유지한다.
+- 새 코드는 `X_BEARER_TOKEN`을 사용하지 않는다. 운영 안정 확인 전 원격의 옛 비밀 값·KV를 삭제하지 않는다.
+- `DISCORD_WEBHOOK_URL`, `SMOKE_TEST_TOKEN` 값은 소스·`.dev.vars`·Wrangler 설정·대화·로그·커밋에 저장하지 않는다.
+- `/run`은 인증된 읽기 진단 전용이다. 연결 시험은 별도 `/test-discord` 경로와 명시된 설정으로만 가능하다.
+- 실제 공개 API 시험은 분당 1회보다 자주 실행하지 않는다. Retry-After를 따른다.
+- `wrangler.preview.jsonc`는 분리된 무발송·무Cron 시험판이다. 운영 KV·Webhook 비밀 값을 연결하지 않는다.
 
-## Source-of-truth and detection rules
+## 수정과 검증
 
-- The only source of truth is Tibo's official X account/posts.
-- The Worker uses the official X API, never web search, Reddit, blogs, RSS, or
-  third-party monitoring summaries.
-- It caches Tibo's numeric user ID, then reads the user timeline using
-  `since_id`; retweets are excluded, each page requests at most 5 posts, and
-  all available pages are consumed before the cursor advances so recovery
-  after downtime cannot silently skip posts.
-- Long-form posts use X API v2's `note_tweet.text`. A short-lived KV context
-  connects a Codex rate-limit announcement to a later timing-only follow-up.
-- Usage and banked contexts use independent KV keys. JavaScript selects a
-  compatible context and requires an explicit reply ID to match when present.
-- Banked-reset credits are not automatic usage-limit resets. They produce a
-  distinct three-line BANKED-reset notification immediately, even if the exact
-  availability time is unknown. A later time clarification produces a second
-  notification explicitly tied to the preceding banked-reset announcement.
-- JavaScript rules recognize explicit resets, increases, supported indirect
-  renewal wording, and timing-only follow-ups. Questions, wishes, negations,
-  personal metaphors, and replies to a different post must not alert.
-- A notification is sent only for posts created within the preceding hour.
-- KV stores `last_seen_id` and per-post notification markers for 90 days to
-  prevent duplicate alerts.
+1. 계획은 프로젝트 Markdown에 먼저 기록하고 기존 미커밋 변경을 보존한다.
+2. 제품 버전은 `src/version.js`의 `0.X`, npm은 `0.X.0`; VERSION_HISTORY 규칙을 따른다.
+3. `npm run check`, `npm test`를 실행한다. `test/*.test.js` 모두 자동 발견한다.
+4. `npm test`의 네트워크는 가짜 API·Discord로 제한한다. workerd 시험에서 Durable Object·동시 요청·SQLite를 검증한다.
+5. `npm run check:live-source`는 공개 API만 읽는다. `scripts/verify-preview.js`도 실제 Discord를 호출하지 않는다.
+6. 빌드 확인은 `npx wrangler deploy --dry-run`. 운영 승인 없이 기본 설정으로 실제 deploy하지 않는다.
+7. 운영 승인 후 실 Cron 확인에만 임시 1분 주기를 쓰고 마지막에 5분으로 복구한다.
+8. 시험 결과는 로컬 Windows/Node, 로컬 workerd, 실제 Cloudflare를 구분한다. 가짜 Discord 성공을 실제 전달 성공으로 표현하지 않는다.
 
-## Reset-time and Discord output contract
-
-The Worker must derive an exact reset time in KST:
-
-- Already-completed resets use the X post timestamp.
-- Relative times such as `in N hours` are calculated from the post timestamp.
-- Explicit Pacific times such as `2 PM PT` are converted using
-  `America/Los_Angeles`, including DST, then rendered in KST.
-- If timing is ambiguous, do not notify; never guess.
-
-For a real detection, Discord content must contain exactly three lines. The
-headline must reflect whether the reset is complete or still scheduled:
-
-```text
-🚨 **Tibo로부터 Codex 리셋 {완료|예정} 감지!** 🚨
-**리셋 시각(KST)**: YYYY-MM-DD HH:mm KST
-https://fixupx.com/thsottiaux/status/{post-id}
-```
-
-FixupX is a preview-only link. It is not used for discovery, verification, or
-classification. Do not include the X post text or original X link in alerts.
-
-## Secrets and security
-
-Configured Cloudflare Worker secrets:
-
-- `X_BEARER_TOKEN`
-- `DISCORD_WEBHOOK_URL`
-
-Never place credential values in source files, `.dev.vars`, `wrangler.jsonc`,
-chat, logs, or commits. The Discord webhook was previously exposed during
-setup; regenerate it if exposure is suspected again.
-
-`SMOKE_TEST_TOKEN` is optional. The protected `POST /run` smoke-test endpoint
-returns `401` when it is not configured; do not make it public merely to test
-the Worker.
-
-## Local development and deployment
-
-From this directory:
-
-```powershell
-npm install
-npm run check
-npm test
-npx wrangler deploy
-```
-
-Use `npx wrangler tail` for live logs. In Cloudflare, use
-**Workers & Pages -> tibo-codex-monitor -> Observability** for stored logs.
-
-When changing behavior:
-
-1. Update `src/index.js` and add/update unit tests under `test/`.
-2. Keep the source-of-truth, exact-KST, and three-line Discord-output contracts
-   unless the user explicitly changes them.
-3. Run `npm run check` and `npm test` before deploying.
-4. Deploy with `npx wrangler deploy` and confirm the expected schedule/bindings
-   in output.
-5. Use a protected, temporary test route only when necessary; remove it and
-   redeploy immediately after testing.
-6. For live Cron verification, temporarily use `* * * * *` so tests run every
-   minute. After consecutive successful runs establish stability, restore
-   `*/5 * * * *`, redeploy, and verify the final schedule before closing work.
-
-Deleting `node_modules` is safe. The source directory is not needed for the
-already-deployed Worker to keep running, but retain it (or back it up in a
-private repository) for future maintenance. Deleting the local Wrangler auth
-configuration only logs the developer out locally; it does not affect Cloudflare
-deployment, Cron, KV, or secrets.
+이전 X 분류·복구 절차는 역사 기록이며 현재 구현 지시가 아니다. 구현 전 파일 사본은 `.wrangler/backups/before-0-8-20260921`에 보관했다. 상세 동작·전환·되돌리기는 README와 CODEX_RESET_MIGRATION_PLAN을 따른다.
