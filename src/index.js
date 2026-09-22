@@ -12,7 +12,7 @@ export function monitor(env, action = "poll") {
 export default {
   async scheduled(controller, env, ctx) {
     ctx.waitUntil((async () => {
-      const response = await monitor(env);
+      const response = await monitor(env, env.ALERTS_HELD === "true" ? "held-preview" : "poll");
       const result = await response.json();
       console.log("Monitor run", JSON.stringify({ version: MONITOR_VERSION, ...result }));
       if (!response.ok) {

@@ -2,9 +2,9 @@
 
 ## 목적과 실행
 
-- 현재 운영은 0.8, 소스 후보는 0.9다. 소스는 codex-reset.com의 timeline·forecast·feed 공개 JSON으로 일반 리셋·리셋권의 모든 구조화된 신호·예고·상태 안내와 사용량 확대를 Discord에 알린다.
+- 현재 운영은 0.9다. 소스는 codex-reset.com의 timeline·forecast·feed 공개 JSON으로 일반 리셋·리셋권의 모든 구조화된 신호·예고·상태 안내와 사용량 확대를 Discord에 알린다.
 - 기존 운영 Worker 이름은 `tibo-codex-monitor`다. PC에 독립적인 Cloudflare 5분 Cron을 유지한다.
-- 2026-09-21 사용자 승인으로 0.8을 운영 적용했다. 이후 운영 변경도 해당 버전의 명시 승인이 필요하다. 실제 상태는 `verification/0.8-production.md`와 원격 배포를 확인한다.
+- 2026-09-23 사용자 승인으로 0.9를 운영 적용했다. 예상 메시지를 먼저 보여 준 뒤 발송 보류를 해제했다. 이후 운영 변경도 해당 버전의 명시 승인이 필요하다. 실제 상태는 `verification/0.9-production.md`와 원격 배포를 확인한다.
 - 현재 사용자 지시: **실제 Discord 시험 전에 멈추고 허락을 요청한다.** 시험 전송 허락을 운영 전환 허락으로 확대하지 않는다.
 - 2026-09-21 승인된 연결 시험 1건은 전송·본문 재조회까지 완료했다. 같은 승인을 추가 시험 전송에 재사용하지 않는다. 상세 결과는 `verification/0.8-implementation.md`에 있다.
 
@@ -24,7 +24,7 @@
 
 ## 설정·보안
 
-- 사용자 승인으로 운영 `wrangler.jsonc`의 `NOTIFICATIONS_ENABLED=true`를 사용한다. 시험판은 `false`를 유지한다. `DISCORD_TEST_ENABLED=false`는 운영·시험판 모두 유지한다.
+- 사용자 승인으로 운영 `wrangler.jsonc`의 `NOTIFICATIONS_ENABLED=true`, `ALERTS_HELD=false`를 사용한다. 시험판은 발송 `false`를 유지한다. `DISCORD_TEST_ENABLED=false`는 운영·시험판 모두 유지한다.
 - 새 코드는 `X_BEARER_TOKEN`을 사용하지 않는다. 운영 안정 확인 전 원격의 옛 비밀 값·KV를 삭제하지 않는다.
 - `DISCORD_WEBHOOK_URL`, `SMOKE_TEST_TOKEN` 값은 소스·`.dev.vars`·Wrangler 설정·대화·로그·커밋에 저장하지 않는다.
 - `/run`은 인증된 읽기 진단 전용이다. 연결 시험은 별도 `/test-discord` 경로와 명시된 설정으로만 가능하다.

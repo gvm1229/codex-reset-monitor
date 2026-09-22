@@ -6,6 +6,32 @@ import { MONITOR_VERSION } from "./version.js";
 import { HEAD_KEY, advanceHead, comparePosition, headFromRecords } from "./head.js";
 
 const eventKey = (id) => `event:${id}`;
+const DELETED = Symbol("dry-run-delete");
+
+class DryRunStorage {
+  constructor(base) { this.base = base; this.changes = new Map(); }
+  async get(key) {
+    const value = this.changes.has(key) ? this.changes.get(key) : await this.base.get(key);
+    return value === DELETED ? undefined : structuredClone(value);
+  }
+  async put(key, value) { this.changes.set(key, structuredClone(value)); }
+  async delete(key) { this.changes.set(key, DELETED); }
+  async list({ prefix = "" } = {}) {
+    const values = await this.base.list({ prefix });
+    for (const [key, value] of this.changes) {
+      if (!key.startsWith(prefix)) continue;
+      if (value === DELETED) values.delete(key);
+      else values.set(key, structuredClone(value));
+    }
+    return values;
+  }
+  async transaction(callback) {
+    const child = new DryRunStorage(this);
+    const result = await callback(child);
+    for (const [key, value] of child.changes) this.changes.set(key, value);
+    return result;
+  }
+}
 
 // The queue spans external awaits. Storage transactions alone cannot serialize a webhook call.
 export class MonitorCoordinator {
@@ -33,6 +59,7 @@ export class MonitorService {
     try {
       let result;
       if (path === "/discord-test") result = await this.testDiscord();
+      else if (path === "/held-preview") result = await this.previewHeldDelivery();
       else if (["/poll", "/diagnose"].includes(path)) result = await this.poll(path === "/diagnose");
       else return new Response("Not found", { status: 404 });
       return Response.json({ ok: true, version: MONITOR_VERSION, ...result });
@@ -41,6 +68,16 @@ export class MonitorService {
       try { await this.storage.put("last_error", failure); } catch { /* Fail without exposing storage internals. */ }
       return Response.json({ ok: false, version: MONITOR_VERSION, error: failure.code }, { status: 503 });
     }
+  }
+
+  async previewHeldDelivery() {
+    if (this.env.ALERTS_HELD !== "true") throw new MonitorError("alerts_not_held");
+    const simulation = new MonitorService(new DryRunStorage(this.storage),
+      { ...this.env, NOTIFICATIONS_ENABLED: "false" },
+      { fetchImpl: this.fetchImpl, clock: this.clock });
+    simulation.snapshot = this.snapshot;
+    const result = await simulation.poll(false, true);
+    return { ...result, held: true };
   }
 
   async getSnapshot() {
@@ -63,7 +100,7 @@ export class MonitorService {
     }
   }
 
-  async poll(diagnostic = false) {
+  async poll(diagnostic = false, dryRun = false) {
     const snapshot = await this.getSnapshot();
     if (!snapshot) return { skipped: "source_cooldown", notifications: 0 };
     const overview = {
@@ -120,7 +157,8 @@ export class MonitorService {
     const oldHead = structuredClone(head);
     const candidateHead = structuredClone(head);
     const canAdvanceHead = snapshot.invalid === 0 && snapshot.conflicts === 0;
-    const result = { ...overview, ...(seeded ? { initialized: true } : {}), notifications: 0, wouldNotify: 0, skipped: {}, mode: enabled ? "live" : "observe" };
+    const result = { ...overview, ...(seeded ? { initialized: true } : {}), notifications: 0, wouldNotify: 0,
+      ...(dryRun ? { expected: [] } : {}), skipped: {}, mode: enabled ? "live" : "observe" };
     const skip = (reason) => { result.skipped[reason] = (result.skipped[reason] || 0) + 1; };
     for (const event of snapshot.events) {
       const now = this.clock();
@@ -150,7 +188,10 @@ export class MonitorService {
       const timeUpdate = notification.rank === record.rank && deliveryKey !== notification.kind &&
         event.window?.endAt > now && !priorKeys.includes(deliveryKey);
       if ((notification.rank <= record.rank && !timeUpdate) || notification.rank < record.highestOffered || priorKeys.includes(deliveryKey)) { advance(); skip("already_seen"); continue; }
-      const active = activeSignal(event, now);
+      // An old hint that predates the 0.8 monitor is historical even if the
+      // website still keeps it visible as context for a newer commitment.
+      const active = activeSignal(event, now) &&
+        (notification.kind !== "reset-sign" || event.announcedAt >= initialized.at - ONE_HOUR_MS);
       const freshness = event.announcedAt > now + 60_000 ? "future_announcement"
         : event.activeSignal && !active ? "expired_signal"
         : event.window && notification.rank < 1 && event.window.endAt <= now ? "expired_signal"
@@ -168,6 +209,11 @@ export class MonitorService {
         continue;
       }
       if (!enabled) {
+        if (dryRun) {
+          if ((await this.storage.get("discord_retry_at") || 0) > now) { skip("discord_cooldown"); break; }
+          result.expected.push({ id: event.id, kind: notification.kind,
+            content: buildDiscordContent(event, notification) });
+        }
         record.rank = notification.rank;
         record.seenKeys = [...new Set([...priorKeys, deliveryKey])];
         await this.storage.put(key, record);

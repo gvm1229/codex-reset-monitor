@@ -47,6 +47,31 @@ test("bootstrap announces a currently open promise older than one hour, but not 
   await h.run(); assert.equal(h.posts.length, 1);
 });
 
+test("held production predicts the exact new promise and banked messages without changing real state", async () => {
+  const h = harness({ ALERTS_HELD: "true" });
+  await h.storage.put("initialized", { at: NOW - 2 * 86_400_000 });
+  const promisedAt = NOW - 3_600_000;
+  h.forecast = { official_signal: promise("2", promisedAt), last_reset_at: new Date(NOW - 10 * 86_400_000).toISOString(),
+    latest_hint: { id: "1", at: new Date(NOW - 3 * 86_400_000).toISOString(), url: "https://x.com/thsottiaux/status/1" } };
+  h.events = [rawEvent("2", { announcement_state: "none", announced_at: new Date(promisedAt).toISOString() }),
+    rawEvent("3", { group: "credits", banked_state: "unknown", announced_at: new Date(NOW - 30 * 60_000).toISOString() })];
+  await h.storage.put("event:2", { id: "2", group: "reset", announcedAt: promisedAt, rank: 0, highestOffered: 0, deliveries: {} });
+  await h.storage.put("event:3", { id: "3", group: "credits", announcedAt: NOW - 30 * 60_000, rank: 0, highestOffered: 0, deliveries: {} });
+  const before = JSON.stringify([...h.storage.data]);
+  const projected = await h.service.previewHeldDelivery();
+  assert.equal(projected.held, true);
+  assert.equal(projected.notifications, 0);
+  assert.deepEqual(projected.expected.map((item) => item.kind), ["reset-watch", "banked-sign"]);
+  assert.match(projected.expected[0].content, /Tibo가 약속한/);
+  assert.match(projected.expected[1].content, /지급 미확인/);
+  assert.deepEqual(h.posts, []);
+  assert.equal(JSON.stringify([...h.storage.data]), before, "held Cron must not advance receipts, head or cursors");
+  h.now += 60_001;
+  const delivered = await h.service.poll();
+  assert.equal(delivered.notifications, 2);
+  assert.deepEqual(h.posts, projected.expected.map((item) => item.content), "released messages match the review preview");
+});
+
 test("0.8 receipt and rank remain valid while an existing unannounced record gains its first watch", async () => {
   const h = harness();
   await h.storage.put("initialized", { at: NOW - 86_400_000 });

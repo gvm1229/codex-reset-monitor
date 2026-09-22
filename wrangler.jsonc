@@ -5,6 +5,7 @@
   "compatibility_date": "2026-07-15",
   "vars": {
     "NOTIFICATIONS_ENABLED": "true",
+    "ALERTS_HELD": "false",
     "DISCORD_TEST_ENABLED": "false",
     "MONITOR_NAMESPACE": "codex-reset:v1:production",
     "SOURCE_CONTACT_URL": "https://tibo-codex-monitor.hojini1229.workers.dev"

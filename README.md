@@ -2,9 +2,9 @@
 
 codex-reset.com의 공개 사건 목록을 5분마다 확인해 **리셋 발표·사용량 확대·저장형 리셋권 안내**를 한국어 Discord 메시지로 전달하는 Cloudflare Worker다. 사용자 PC가 꺼져 있어도 클라우드에서 실행한다.
 
-현재 운영은 **0.8**, 로컬 소스는 **0.9 후보**다. npm 표기는 `0.9.0`이며 `src/version.js`가 소스 버전의 정본이다. 아래 동작 설명은 0.9 기준이다. 신호·예고·시간 구간을 추가한 0.9는 운영 적용과 추가 실제 Discord 시험 승인을 아직 받지 않았다. 분리된 무발송 시험판은 `wrangler.preview.jsonc`를 사용한다.
+현재 운영은 **0.9**다. npm 표기는 `0.9.0`이며 `src/version.js`가 소스 버전의 정본이다. 사용자 승인으로 신호·예고·시간 구간 알림을 운영에 적용했다. 분리된 무발송 시험판은 `wrangler.preview.jsonc`를 사용한다.
 
-0.8의 운영·실제 연결 시험 기록은 [0.8 운영 검증](verification/0.8-production.md)에 있다. 0.9의 범위·호환성·승인 경계는 [신호 확대 계획](SIGNALS_0_9_PLAN.md)을 따른다.
+0.9의 적용 결과는 [운영 검증](verification/0.9-production.md), 이전 0.8 운영 기록은 [0.8 운영 검증](verification/0.8-production.md)에 있다. 0.9의 범위와 승인된 발송 순서는 [신호 확대 계획](SIGNALS_0_9_PLAN.md)을 따른다.
 
 ## 동작
 
@@ -47,7 +47,8 @@ Durable Object는 같은 감시기의 요청을 한 순서로 처리하고 기�
 
 | 설정 | 기본값과 역할 |
 | --- | --- |
-| `NOTIFICATIONS_ENABLED` | 승인된 운영 설정은 `true`, 시험판은 `false`. `true`일 때만 정기 감시가 실제 발송 |
+| `NOTIFICATIONS_ENABLED` | 승인된 운영 설정은 `true`, 시험판은 `false`. `true`일 때 정기 감시가 실제 발송 가능 |
+| `ALERTS_HELD` | `false`. 0.9 적용 직후에는 예상 문구를 먼저 보여 주려고 `true`로 잠시 실행했다. 이때 정기 실행은 후보만 계산하고 Discord·영수증·확인 위치를 변경하지 않았다. 현재는 해제했다 |
 | `DISCORD_TEST_ENABLED` | `false`. 별도 실제 연결 시험을 명시적으로 켤 때만 `true` |
 | `MONITOR_NAMESPACE` | 운영·시험판의 저장 이름을 구별 |
 | `SOURCE_CONTACT_URL` | API User-Agent에 넣는 공개 프로젝트·연락 URL |
@@ -114,7 +115,7 @@ node scripts/verify-preview.js
 
 ## 운영 전환
 
-0.8은 사용자 승인으로 운영에 적용했다. 이후 버전의 운영 전환도 해당 버전의 명시 승인 후 수행한다. `npm run deploy`는 실제 발송 설정을 적용하므로 시험 목적으로 사용하면 안 된다.
+0.9는 사용자 승인으로 운영에 적용했다. 예상 메시지 2건을 사용자에게 먼저 보여 준 뒤 보류를 해제했고, 실제 5분 정기 실행에서 2건의 새 안내가 전송 처리됐다. 이후 버전의 운영 전환도 해당 버전의 명시 승인 후 수행한다. `npm run deploy`는 실제 발송 설정을 적용하므로 시험 목적으로 사용하면 안 된다.
 
 1. 검증 결과와 실제 Discord 시험 결과를 제시한다. 시험 허락과 운영 전환 허락을 구별한다.
 2. 기존 배포 UUID·비밀 값·KV를 보존하고, 새 SQLite Durable Object 구성과 SOURCE_CONTACT_URL을 확인한다.

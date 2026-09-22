@@ -15,6 +15,7 @@ test("deployed code has no X client, text classifier, scraper or legacy recovery
 test("approved production enables monitoring, keeps tests off and preserves the five-minute schedule", async () => {
   const config = JSON.parse(await readFile("wrangler.jsonc", "utf8"));
   assert.equal(config.vars.NOTIFICATIONS_ENABLED, "true");
+  assert.equal(config.vars.ALERTS_HELD, "false");
   assert.equal(config.vars.DISCORD_TEST_ENABLED, "false");
   assert.deepEqual(config.triggers.crons, ["*/5 * * * *"]);
   assert.equal(config.durable_objects.bindings[0].class_name, "MonitorCoordinator");

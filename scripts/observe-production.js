@@ -4,7 +4,7 @@ import { writeFile, access, mkdir } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 
 const cli = fileURLToPath(new URL("../node_modules/wrangler/wrangler-dist/cli.js", import.meta.url));
-const output = new URL("../.wrangler/production-0-8-runs.json", import.meta.url);
+const output = new URL("../.wrangler/production-0-9-held.json", import.meta.url);
 const stopFile = new URL("../.wrangler/production-tail-stop", import.meta.url);
 await mkdir(new URL("../.wrangler/", import.meta.url), { recursive: true });
 const child = spawn(process.execPath, [cli, "tail", "tibo-codex-monitor", "--format", "json"], {
@@ -18,7 +18,7 @@ function consume(value) {
   const log = value.logs?.find((entry) => entry.message?.[0] === "Monitor run");
   let result;
   try { result = log ? JSON.parse(log.message[1]) : null; } catch { result = null; }
-  const allowed = ["ok", "version", "events", "invalid", "conflicts", "checkedAt", "expiresAt", "initialized", "notifications", "wouldNotify", "skipped", "mode", "error"];
+  const allowed = ["ok", "version", "events", "invalid", "conflicts", "checkedAt", "expiresAt", "initialized", "notifications", "wouldNotify", "expected", "held", "skipped", "mode", "error"];
   const observation = {
     observedAt: new Date().toISOString(), eventTimestamp: value.eventTimestamp,
     cron: value.event.cron, scheduledTime: value.event.scheduledTime,

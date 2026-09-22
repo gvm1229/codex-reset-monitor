@@ -4,14 +4,14 @@ import { build } from "esbuild";
 import { Miniflare, Response as RuntimeResponse, convertV4MiniflareOptions } from "miniflare";
 import { ENV } from "./helpers.js";
 
-async function runtime(t, { enabled = false, testEnabled = false, signalTest = false } = {}) {
+async function runtime(t, { enabled = false, testEnabled = false, signalTest = false, held = false } = {}) {
   const bundle = await build({ entryPoints: ["src/index.js"], bundle: true, write: false, format: "esm", platform: "browser", target: "es2022" });
   const calls = [];
   const now = Date.now();
   const mf = new Miniflare(convertV4MiniflareOptions({ name: "monitor-test",
     modules: true, script: bundle.outputFiles[0].text, compatibilityDate: "2026-07-15",
     durableObjects: { MONITOR: { className: "MonitorCoordinator", useSQLite: true } },
-    bindings: { ...ENV, NOTIFICATIONS_ENABLED: String(enabled), DISCORD_TEST_ENABLED: String(testEnabled), SMOKE_TEST_TOKEN: "test-token" },
+    bindings: { ...ENV, NOTIFICATIONS_ENABLED: String(enabled), DISCORD_TEST_ENABLED: String(testEnabled), ALERTS_HELD: String(held), SMOKE_TEST_TOKEN: "test-token" },
     outboundService: async (request) => {
       const url = new URL(request.url);
       calls.push(url.hostname);
@@ -80,6 +80,23 @@ test("workerd: concurrent bootstrap polls deliver one mocked active watch, never
   assert.equal(results.reduce((n, r) => n + r.notifications, 0), 1);
   assert.equal(calls.filter((host) => host === "discord.com").length, 1);
   assert.equal(calls.filter((host) => host === "codex-reset.com").length, 3);
+});
+
+test("workerd: held production previews an active promise without Discord or durable event writes", async (t) => {
+  const { mf, calls } = await runtime(t, { enabled: true, signalTest: true, held: true });
+  const bindings = await mf.getBindings();
+  const stub = bindings.MONITOR.get(bindings.MONITOR.idFromName("codex-reset:v1:production:live"));
+  const response = await stub.fetch("https://internal/held-preview", { method: "POST" });
+  const result = await response.json();
+  assert.equal(response.status, 200);
+  assert.equal(result.held, true);
+  assert.equal(result.notifications, 0);
+  assert.equal(result.expected.length, 1);
+  assert.match(result.expected[0].content, /Tibo가 약속한/);
+  const records = await stub.fetch("https://internal/diagnose", { method: "POST" });
+  const state = await records.json();
+  assert.equal(state.head, null, "review must not migrate the live head before delivery is allowed");
+  assert.equal(calls.filter((host) => host === "discord.com").length, 0);
 });
 
 test("workerd: explicitly enabled test uses a mocked Discord once, even with overlapping requests", async (t) => {
