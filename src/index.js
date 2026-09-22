@@ -23,17 +23,21 @@ export default {
   },
   async fetch(request, env) {
     const path = new URL(request.url).pathname;
-    if (request.method !== "POST" || !["/run", "/test-discord"].includes(path)) {
+    if (request.method !== "POST" || !["/run", "/test-discord", "/preview-poll"].includes(path)) {
       return new Response("Not found", { status: 404 });
     }
+    if (path === "/preview-poll" && env.PREVIEW_POLL_ENABLED !== "true") return new Response("Not found", { status: 404 });
     if (!env.SMOKE_TEST_TOKEN || request.headers.get("Authorization") !== `Bearer ${env.SMOKE_TEST_TOKEN}`) {
       return new Response("Unauthorized", { status: 401 });
     }
     if (path === "/test-discord" && env.DISCORD_TEST_ENABLED !== "true") {
       return new Response("Discord test disabled", { status: 403 });
     }
+    if (path === "/preview-poll" && env.NOTIFICATIONS_ENABLED === "true") {
+      return new Response("Preview poll disabled", { status: 403 });
+    }
     try {
-      return await monitor(env, path === "/run" ? "diagnose" : "discord-test");
+      return await monitor(env, path === "/run" ? "diagnose" : path === "/preview-poll" ? "poll" : "discord-test");
     } catch { return Response.json({ ok: false, error: "monitor_unavailable" }, { status: 503 }); }
   },
 };

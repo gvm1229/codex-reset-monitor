@@ -4,7 +4,7 @@ import { build } from "esbuild";
 import { Miniflare, Response as RuntimeResponse, convertV4MiniflareOptions } from "miniflare";
 import { ENV } from "./helpers.js";
 
-async function runtime(t, { enabled = false, testEnabled = false } = {}) {
+async function runtime(t, { enabled = false, testEnabled = false, signalTest = false } = {}) {
   const bundle = await build({ entryPoints: ["src/index.js"], bundle: true, write: false, format: "esm", platform: "browser", target: "es2022" });
   const calls = [];
   const now = Date.now();
@@ -15,6 +15,15 @@ async function runtime(t, { enabled = false, testEnabled = false } = {}) {
     outboundService: async (request) => {
       const url = new URL(request.url);
       calls.push(url.hostname);
+      if (["/api/forecast", "/api/feed"].includes(url.pathname)) {
+        const official_signal = signalTest ? { tweet_id: "88888", kind: "signal", at: new Date(now - 14 * 3_600_000).toISOString(),
+          url: "https://x.com/thsottiaux/status/88888", window: { start_at: new Date(now - 14 * 3_600_000).toISOString(),
+            end_at: new Date(now + 3_600_000).toISOString(), target_at: new Date(now + 3_600_000).toISOString(), target_kind: "deadline" } } : null;
+        return RuntimeResponse.json(url.pathname === "/api/forecast" ? { official_signal } : { tweets: [] }, { headers: {
+          "x-published-checked-at": new Date(now - 1000).toISOString(),
+          "x-published-expires-at": new Date(now + 180_000).toISOString(),
+        } });
+      }
       if (url.href === "https://codex-reset.com/api/timeline") {
         return RuntimeResponse.json({ events: [{ id: "2098685367058612394", group: "reset", type: "reset",
           announcement_state: "announced", announced_at: new Date(now - 60_000).toISOString(),
@@ -23,10 +32,10 @@ async function runtime(t, { enabled = false, testEnabled = false } = {}) {
           "x-published-expires-at": new Date(now + 180_000).toISOString(),
         } });
       }
-      if (url.hostname === "discord.com" && testEnabled) {
+      if (url.hostname === "discord.com" && (testEnabled || signalTest)) {
         assert.equal(url.searchParams.get("wait"), "true");
         const body = await request.json();
-        assert.match(body.content, /실제 리셋 아님/);
+        assert.match(body.content, signalTest ? /예고 마감\(KST\)/ : /실제 리셋 아님/);
         assert.deepEqual(body.allowed_mentions, { parse: [] });
         return RuntimeResponse.json({ id: "12345" });
       }
@@ -50,7 +59,9 @@ test("workerd: protected diagnostic runs without sending or initializing the liv
   const results = await Promise.all([1, 2, 3].map(async () => (await stub.fetch("https://internal/poll", { method: "POST" })).json()));
   assert.equal(results.filter((r) => r.initialized).length, 1);
   assert.equal(results.reduce((n, r) => n + r.notifications, 0), 0);
-  assert.deepEqual(calls, ["codex-reset.com"]);
+  const after = await mf.dispatchFetch("https://worker.test/run", { method: "POST", headers: { Authorization: "Bearer test-token" } });
+  assert.equal((await after.json()).head.reset.id, "2098685367058612394");
+  assert.deepEqual(calls, ["codex-reset.com", "codex-reset.com", "codex-reset.com"]);
 });
 
 test("workerd: default-off test endpoint never makes an outbound Discord request", async (t) => {
@@ -58,6 +69,17 @@ test("workerd: default-off test endpoint never makes an outbound Discord request
   const response = await mf.dispatchFetch("https://worker.test/test-discord", { method: "POST", headers: { Authorization: "Bearer test-token" } });
   assert.equal(response.status, 403);
   assert.equal(calls.length, 0);
+});
+
+test("workerd: concurrent bootstrap polls deliver one mocked active watch, never the archived reset", async (t) => {
+  const { mf, calls } = await runtime(t, { enabled: true, signalTest: true });
+  const bindings = await mf.getBindings();
+  const stub = bindings.MONITOR.get(bindings.MONITOR.idFromName("codex-reset:v1:production:live"));
+  const results = await Promise.all([1, 2, 3].map(async () => (await stub.fetch("https://internal/poll", { method: "POST" })).json()));
+  assert.equal(results.filter((r) => r.initialized).length, 1);
+  assert.equal(results.reduce((n, r) => n + r.notifications, 0), 1);
+  assert.equal(calls.filter((host) => host === "discord.com").length, 1);
+  assert.equal(calls.filter((host) => host === "codex-reset.com").length, 3);
 });
 
 test("workerd: explicitly enabled test uses a mocked Discord once, even with overlapping requests", async (t) => {

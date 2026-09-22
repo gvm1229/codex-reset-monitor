@@ -20,10 +20,12 @@ test("approved production enables monitoring, keeps tests off and preserves the 
   assert.equal(config.durable_objects.bindings[0].class_name, "MonitorCoordinator");
   assert.deepEqual(config.migrations[0].new_sqlite_classes, ["MonitorCoordinator"]);
   assert.equal(config.vars.DISCORD_WEBHOOK_URL, undefined);
+  assert.equal(config.vars.PREVIEW_POLL_ENABLED, undefined);
   const preview = JSON.parse(await readFile("wrangler.preview.jsonc", "utf8"));
   assert.notEqual(preview.name, config.name);
   assert.deepEqual(preview.triggers.crons, []);
   assert.equal(preview.kv_namespaces, undefined);
   assert.equal(preview.vars.NOTIFICATIONS_ENABLED, "false");
   assert.equal(preview.vars.DISCORD_TEST_ENABLED, "false");
+  assert.equal(preview.vars.PREVIEW_POLL_ENABLED, "true");
 });

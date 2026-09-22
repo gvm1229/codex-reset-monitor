@@ -3,6 +3,9 @@ import { MonitorError, readBoundedJson, retryAt } from "./http.js";
 
 const HEADLINES = {
   reset: "🚨 **Codex 리셋 발표 감지!**",
+  "reset-sign": "👀 **Codex 리셋 관련 신호 — 확정 아님**",
+  "reset-watch": "⏳ **Tibo가 약속한 Codex 리셋 예고 — 완료 아님**",
+  "banked-sign": "👀 **Codex 리셋권·크레딧 관련 신호 — 지급 미확인**",
   boost: "📈 **Codex 사용량 확대 안내!**",
   "banked-announced": "🏦 **Codex 리셋권 지급 예고!**",
   "banked-arriving": "🏦 **Codex 리셋권 지급 진행 안내!**",
@@ -24,7 +27,15 @@ export function previewUrl(value) {
 export function buildDiscordContent(event, notification) {
   const headline = HEADLINES[notification.kind];
   if (!headline) throw new MonitorError("invalid_notification_kind");
-  return [headline, `**발표 시각(KST)**: ${formatKst(event.announcedAt)}`,
+  const window = ["reset", "banked-available", "boost"].includes(notification.kind) ? null : event.window;
+  const time = window
+    ? event.window.kind === "deadline"
+      ? `**예고 마감(KST)**: ${formatKst(event.window.endAt, true)}까지 · 확정 시각 아님`
+      : event.window.kind === "center"
+        ? `**예상 시각(KST)**: ${formatKst(event.window.targetAt, true)} 부근 · 구간 ${formatKst(event.window.startAt, true)} ~ ${formatKst(event.window.endAt, true)}`
+        : `**예상 구간(KST)**: ${formatKst(event.window.startAt, true)} ~ ${formatKst(event.window.endAt, true)}`
+    : `**발표 시각(KST)**: ${formatKst(event.announcedAt)}${notification.rank < 1 ? " · 적용 시각 미정" : ""}`;
+  return [headline, time,
     `출처: https://codex-reset.com/ · ${previewUrl(event.url)}`].join("\n");
 }
 

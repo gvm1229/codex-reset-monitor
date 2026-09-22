@@ -9,17 +9,17 @@ const normalize = (event) => normalizeTimeline({ events: [event] }).events[0];
 
 test("documented fields alone select resets, boosts and known banked states", () => {
   const cases = [
-    [{}, "reset"], [{ announcement_state: "none" }, null], [{ announcement_state: undefined }, null],
+    [{}, "reset"], [{ announcement_state: "none" }, "reset-sign"], [{ announcement_state: undefined }, "reset-sign"],
     [{ group: "boost", announcement_state: "none" }, "boost"],
     ...["announced", "arriving", "available"].map((s) => [{ group: "credits", banked_state: s }, `banked-${s}`]),
-    [{ group: "credits", banked_state: "unknown", reset_kind: "banked" }, null],
-    [{ group: "credits" }, null], [{ group: "unlock" }, null], [{ group: "new-group" }, null],
+    [{ group: "credits", banked_state: "unknown", reset_kind: "banked" }, "banked-sign"],
+    [{ group: "credits" }, "banked-sign"], [{ group: "unlock" }, null], [{ group: "new-group" }, null],
   ];
   for (const [fields, kind] of cases) assert.equal(selectNotification(normalize(rawEvent("1", fields)))?.kind ?? null, kind);
 });
 
 test("raw text cannot cause an alert and unknown fields never survive normalization", () => {
-  const event = normalize(rawEvent("1", { announcement_state: "none", text: "Codex RESET now", summary: "@everyone", latest_alert: { state: "confirmed" } }));
+  const event = normalize(rawEvent("1", { group: "unlock", announcement_state: "none", text: "Codex RESET now", summary: "@everyone", latest_alert: { state: "confirmed" } }));
   assert.equal(selectNotification(event), null);
   assert.equal(event.text, undefined);
   assert.equal(event.summary, undefined);

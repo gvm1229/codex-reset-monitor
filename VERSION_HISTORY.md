@@ -14,6 +14,13 @@
 | 0.6 | JavaScript 전용 판정 복원, AI·재시도 큐·성공 heartbeat 제거 | `f58b6d4`, `JS_INTENT_RESTORE_PLAN.md` |
 | 0.7 | `we have now reset usage` 누락 수정, 축약형·시제·오탐 방어와 판정 사유 로그 | `MISSED_RESET_2026_08_31_PLAN.md`, 이번 소스 변경 |
 | 0.8 | codex-reset.com API로 교체, X·문장 판정 제거, 발표 시각 표시, Durable Object 순차 전송 | 사용자 승인 운영 적용 완료; `verification/0.8-production.md` |
+| 0.9 | forecast·feed 추가, 약한 신호·공식 예고·unknown 리셋권, 시간 구간·마감 변경 알림, 단계별 확인 위치로 과거 사건 재출현 방지 | `SIGNALS_0_9_PLAN.md`; 후보, 운영 미적용 |
+
+## 0.9 신호 확대 후보 — 2026-09-23
+
+- 사용자 요청으로 모든 공개 리셋·리셋권 관련 신호와 예고 시간 구간을 알림 범위에 추가했다. 원문 자체 해석 없이 사이트가 제공한 구조를 사용한다.
+- Windows 로컬 60개 자동 시험 및 구문·버전 검사를 통과했다. 무발송 Cloudflare 시험판에서 실제 세 API와 현재 신호 2건의 알림 미리보기를 확인했다.
+- 소스 업로드 UUID는 `eb521e05-e494-4633-9fbd-c960aa7a8e10`. 운영 0.8은 유지됐으며 새 실제 Discord 전송은 하지 않았다. 상세 범위는 `verification/0.9-signals.md`에 있다.
 
 ## 번호 부여 규칙
 

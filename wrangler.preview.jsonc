@@ -1,6 +1,6 @@
 {
   "$schema": "./node_modules/wrangler/config-schema.json",
-  "name": "tibo-codex-monitor-v0-8-preview",
+  "name": "tibo-codex-monitor-v0-9-preview",
   "main": "src/index.js",
   "compatibility_date": "2026-07-15",
   "workers_dev": true,
@@ -9,7 +9,8 @@
   "vars": {
     "NOTIFICATIONS_ENABLED": "false",
     "DISCORD_TEST_ENABLED": "false",
-    "MONITOR_NAMESPACE": "codex-reset:v1:preview-0-8",
+    "PREVIEW_POLL_ENABLED": "true",
+    "MONITOR_NAMESPACE": "codex-reset:v1:preview-0-9",
     "SOURCE_CONTACT_URL": "https://tibo-codex-monitor.hojini1229.workers.dev"
   },
   "durable_objects": {

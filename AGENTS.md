@@ -2,7 +2,7 @@
 
 ## 목적과 실행
 
-- 소스 0.8은 `https://codex-reset.com/api/timeline`의 공개 JSON으로 리셋 발표·사용량 확대·저장형 리셋권을 Discord에 알린다.
+- 현재 운영은 0.8, 소스 후보는 0.9다. 소스는 codex-reset.com의 timeline·forecast·feed 공개 JSON으로 일반 리셋·리셋권의 모든 구조화된 신호·예고·상태 안내와 사용량 확대를 Discord에 알린다.
 - 기존 운영 Worker 이름은 `tibo-codex-monitor`다. PC에 독립적인 Cloudflare 5분 Cron을 유지한다.
 - 2026-09-21 사용자 승인으로 0.8을 운영 적용했다. 이후 운영 변경도 해당 버전의 명시 승인이 필요하다. 실제 상태는 `verification/0.8-production.md`와 원격 배포를 확인한다.
 - 현재 사용자 지시: **실제 Discord 시험 전에 멈추고 허락을 요청한다.** 시험 전송 허락을 운영 전환 허락으로 확대하지 않는다.
@@ -12,12 +12,13 @@
 
 - X API·HTML 수집·트윗 본문 의미 판정·시간 문장 해석·LLM을 도입하지 않는다.
 - `src/source.js`: 고정 API, 식별 User-Agent, 10초 제한, 1 MiB 제한, 게시본 신선도.
-- `src/events.js`: 문서화된 필드만 정규화하고 선택. 알 수 없는 필드는 버린다.
+- `src/events.js`와 `src/signals.js`: 확인한 공개 필드만 명시적으로 검사한다. 사용자 요구로 공식 예고의 window, 최신 암시, 공개 teasing 판정 등 추가 필드를 허용한다. 이 필드의 형식은 안정 계약이 아니므로 검사·진단하며 알 수 없는 값으로 완료를 추정하지 않는다.
 - `src/delivery.js`: 단일 SQLite Durable Object와 순차 처리 대기열. 미발송·실발송·시험 상태는 분리한다.
 - `src/discord.js`: 세 줄·한국어·KST 발표 시각·사이트 출처·미리보기 링크. 원문과 원본 X 링크를 넣지 않는다. mentions 차단.
-- 초기 정상 목록은 과거 알림을 보내지 않는다. reset+announced, boost, credits+알려진 banked_state만 대상이다.
-- 발표 후 1시간 제한. 같은 ID의 상태 전진만 추가 알림하며 편집·역행·삭제 후 재등장으로 보내지 않는다.
-- 실제 리셋 적용 시각·계정 리셋 완료를 추정하지 않는다. 예측·unlock·일반 credits·unknown은 제외한다.
+- 초기 목록의 종료된 이력은 보내지 않지만 API가 현재 활성으로 제공하는 예고·암시는 처음에도 한 번 알린다. unknown credits도 지급 미확인 신호로 구별한다.
+- 게시 후 1시간 제한은 0.9에서 제거했다. 초기화 이후 새 사건·상태 전진·새 미래 시간 구간을 알리고, 과거 이력 보충은 초기화 시각 기준으로 제외한다. 429 재시도만 최초 시도 후 1시간으로 제한한다. 역행·같은 구간 재등장은 반복하지 않는다.
+- 0.9의 `source_head:v1`은 확정 리셋·암시·예고·리셋권 단계별 확인 위치를 저장한다. 낡은 새 ID는 막되 기존 ID의 실제 새 상태는 허용한다. 0.8의 저장 기록으로 head를 복원하고 처리하지 않은 뒷부분으로 head를 앞당기지 않는다.
+- 실제 리셋 적용 시각·계정 리셋 완료를 추정하지 않는다. 마감·중심 시각·구간을 API대로 구별한다. 통계 확률의 단순 변화와 unlock은 제외한다.
 - 전송 직전 durable attempting 기록, wait=true Discord 응답의 메시지 ID를 영수증으로 기록한다. 불확실한 결과는 자동 재전송 금지.
 - `STATE` KV는 옛 운영의 되돌리기용으로 남겨 두며 새 코드에서 사용하지 않는다. 정상 KV heartbeat 없음.
 
@@ -27,6 +28,7 @@
 - 새 코드는 `X_BEARER_TOKEN`을 사용하지 않는다. 운영 안정 확인 전 원격의 옛 비밀 값·KV를 삭제하지 않는다.
 - `DISCORD_WEBHOOK_URL`, `SMOKE_TEST_TOKEN` 값은 소스·`.dev.vars`·Wrangler 설정·대화·로그·커밋에 저장하지 않는다.
 - `/run`은 인증된 읽기 진단 전용이다. 연결 시험은 별도 `/test-discord` 경로와 명시된 설정으로만 가능하다.
+- `/preview-poll`은 인증된 무발송 시험판에만 열어 head 영속성을 확인한다. 운영 설정은 이 경로를 켜지 않는다.
 - 실제 공개 API 시험은 분당 1회보다 자주 실행하지 않는다. Retry-After를 따른다.
 - `wrangler.preview.jsonc`는 분리된 무발송·무Cron 시험판이다. 운영 KV·Webhook 비밀 값을 연결하지 않는다.
 

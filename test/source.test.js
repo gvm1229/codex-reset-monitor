@@ -9,7 +9,7 @@ test("one attributed GET loads the API, even when the last event is old", async 
     calls++;
     assert.equal(url, TIMELINE_URL);
     assert.equal(options.redirect, "manual");
-    assert.match(options.headers["User-Agent"], /TiboCodexMonitor\/0.8.*monitor.example\/contact/);
+    assert.match(options.headers["User-Agent"], /TiboCodexMonitor\/0.9.*monitor.example\/contact/);
     assert.equal(options.headers.Authorization, undefined);
     return sourceResponse([rawEvent("1", { announced_at: "2025-01-01T00:00:00Z" })]);
   } });

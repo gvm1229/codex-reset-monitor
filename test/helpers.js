@@ -18,6 +18,10 @@ export function sourceResponse(events = [], now = NOW, headers = {}) {
   } });
 }
 
+export function publishedResponse(payload, now = NOW) {
+  return Response.json(payload, { headers: sourceResponse([], now).headers });
+}
+
 export class MemoryStorage {
   data = new Map();
   failPut = null;
