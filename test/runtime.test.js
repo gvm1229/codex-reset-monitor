@@ -36,6 +36,9 @@ async function runtime(t, { enabled = false, testEnabled = false, signalTest = f
         assert.equal(url.searchParams.get("wait"), "true");
         const body = await request.json();
         assert.match(body.content, signalTest ? /예고 마감\(KST\)/ : /실제 리셋 아님/);
+        assert.equal(body.content.match(/https?:\/\/\S+/g)?.length, 1);
+        assert.match(body.content, /https:\/\/fixupx\.com\//);
+        assert.doesNotMatch(body.content, /codex-reset\.com/);
         assert.deepEqual(body.allowed_mentions, { parse: [] });
         return RuntimeResponse.json({ id: "12345" });
       }

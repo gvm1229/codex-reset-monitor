@@ -33,6 +33,7 @@ test("approved adapter sends one mocked message and reads it back exactly", asyn
   });
   const first = await handler.fetch(request(), env);
   assert.equal((await first.json()).receipt.contentVerified, true);
+  assert.deepEqual(content.match(/https?:\/\/\S+/g), ["https://fixupx.com/thsottiaux/status/2098685367058612394"]);
   assert.equal((await handler.fetch(request(), env)).status, 409);
   assert.equal(posts, 1);
   assert.equal((await (await handler.fetch(request("GET"), env)).json()).receipt.status, "sent");

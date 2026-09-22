@@ -186,6 +186,18 @@ test("new events send once, text/time edits and remove/reappear do not replay", 
   assert.equal((await h.storage.get("event:1")).deliveries.reset.messageId, "1001");
 });
 
+test("an unsupported source never substitutes a site link; corrected FixupX source can notify", async () => {
+  const h = harness();
+  await h.run([]);
+  const blocked = await h.run([rawEvent("1", { url: "https://example.test/other-story" })]);
+  assert.equal(blocked.skipped.unsupported_preview_link, 1);
+  assert.equal(blocked.notifications, 0);
+  assert.equal(h.posts.length, 0);
+  await h.run([rawEvent("1")]);
+  assert.equal(h.posts.length, 1);
+  assert.deepEqual(h.posts[0].match(/https?:\/\/\S+/g), ["https://fixupx.com/thsottiaux/status/1"]);
+});
+
 test("pending baseline reset can become announced; old and future posts stay silent", async () => {
   const h = harness();
   await h.run([rawEvent("1", { announcement_state: "none" })]);

@@ -1,6 +1,6 @@
 import { ONE_HOUR_MS, activeSignal, notificationKey, selectNotification } from "./events.js";
 import { fetchSnapshot } from "./source.js";
-import { buildDiscordContent, buildDiscordTestContent, discordUrl, sendDiscord } from "./discord.js";
+import { buildDiscordContent, buildDiscordTestContent, discordUrl, previewUrl, sendDiscord } from "./discord.js";
 import { MonitorError, safeFailure } from "./http.js";
 import { MONITOR_VERSION } from "./version.js";
 import { HEAD_KEY, advanceHead, comparePosition, headFromRecords } from "./head.js";
@@ -116,7 +116,7 @@ export class MonitorService {
         head: await this.storage.get(HEAD_KEY) ?? null,
         reviewIds: reviews.slice(0, 20).map((r) => r.id),
         activeSignals: snapshot.events.filter((event) => activeSignal(event, this.clock()))
-          .filter((event) => selectNotification(event)).slice(0, 20)
+          .filter((event) => selectNotification(event) && previewUrl(event.url)).slice(0, 20)
           .map((event) => ({ id: event.id, kind: selectNotification(event).kind,
             preview: buildDiscordContent(event, selectNotification(event)) })),
       };
@@ -181,6 +181,7 @@ export class MonitorService {
       if (record.blocked) { skip(record.blocked); continue; }
       const notification = selectNotification(event);
       if (!notification) { skip("ineligible"); continue; }
+      if (!previewUrl(event.url)) { skip("unsupported_preview_link"); continue; }
       const position = { id: event.id, announcedAt: Math.min(record.announcedAt, event.announcedAt) };
       const advance = () => { if (canAdvanceHead) advanceHead(candidateHead, position, notification.kind); };
       const deliveryKey = notificationKey(event, notification);

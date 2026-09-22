@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { absoluteTime, normalizeTimeline, selectNotification, eventFreshness } from "../src/events.js";
-import { buildDiscordContent, previewUrl } from "../src/discord.js";
+import { buildDiscordContent, buildDiscordTestContent, previewUrl } from "../src/discord.js";
 import { formatKst } from "../src/time.js";
 import { NOW, rawEvent } from "./helpers.js";
 
@@ -50,21 +50,32 @@ test("absolute times reject missing zones and impossible calendar values", () =>
   assert.equal(eventFreshness(NOW + 60_001, NOW), "future_announcement");
 });
 
-test("all notification kinds render three lines, announcement KST, attribution and no post text", () => {
-  for (const fields of [{}, { group: "boost" }, ...["announced", "arriving", "available"].map((s) => ({ group: "credits", banked_state: s }))]) {
+test("every alert has exactly three lines and one FixupX link, with no site link or post text", () => {
+  for (const fields of [{}, { announcement_state: "none" }, { group: "boost" }, ...["unknown", "announced", "arriving", "available"].map((s) => ({ group: "credits", banked_state: s }))]) {
     const event = normalize(rawEvent("2098685367058612394", { ...fields, announced_at: "2026-09-12T08:09:17Z", text: "SECRET_TEXT" }));
     const content = buildDiscordContent(event, selectNotification(event));
     assert.equal(content.split("\n").length, 3);
     assert.match(content, /발표 시각\(KST\).*2026-09-12 17:09 KST/);
-    assert.match(content, /출처: https:\/\/codex-reset.com\//);
-    assert.match(content, /https:\/\/fixupx.com\/thsottiaux\/status\/2098685367058612394$/);
+    assert.equal(content.split("\n")[2], "https://fixupx.com/thsottiaux/status/2098685367058612394");
+    assert.deepEqual(content.match(/https?:\/\/\S+/g), ["https://fixupx.com/thsottiaux/status/2098685367058612394"]);
+    assert.doesNotMatch(content, /codex-reset\.com/);
     assert.doesNotMatch(content, /SECRET_TEXT|리셋 완료/);
   }
+  const watch = { ...normalize(rawEvent("123", { announcement_state: "none" })), signalLevel: "official", window: {
+    kind: "deadline", startAt: NOW, endAt: NOW + 60_000, targetAt: NOW + 60_000,
+  } };
+  const watchMessage = buildDiscordContent(watch, selectNotification(watch));
+  assert.equal(watchMessage.split("\n")[2], "https://fixupx.com/thsottiaux/status/123");
+  assert.deepEqual(watchMessage.match(/https?:\/\/\S+/g), ["https://fixupx.com/thsottiaux/status/123"]);
+  const testMessage = buildDiscordTestContent(NOW);
+  assert.equal(testMessage.split("\n").length, 3);
+  assert.deepEqual(testMessage.match(/https?:\/\/\S+/g), ["https://fixupx.com/thsottiaux/status/2098685367058612394"]);
   assert.equal(formatKst("2026-12-31T15:00:00Z"), "2027-01-01 00:00 KST");
 });
 
 test("links reject host spoofing and credentials and never echo unknown URLs", () => {
   for (const url of ["https://x.com.evil.test/a/status/1", "https://user:pass@x.com/a/status/1", "javascript:alert(1)", "https://example.test/@everyone"]) {
-    assert.equal(previewUrl(url), "https://codex-reset.com/timeline");
+    assert.equal(previewUrl(url), null);
   }
+  assert.throws(() => buildDiscordContent({ announcedAt: NOW, url: "https://example.test/not-x" }, { kind: "reset", rank: 1 }), /unsupported_preview_link/);
 });

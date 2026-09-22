@@ -20,13 +20,15 @@ export function previewUrl(value) {
         ["x.com", "www.x.com", "twitter.com", "www.twitter.com"].includes(url.hostname) && match) {
       return `https://fixupx.com/${match[1]}/status/${match[2]}`;
     }
-  } catch { /* Unknown sources link to the site's timeline. */ }
-  return "https://codex-reset.com/timeline";
+  } catch { /* An unknown source cannot have a trustworthy FixupX preview. */ }
+  return null;
 }
 
 export function buildDiscordContent(event, notification) {
   const headline = HEADLINES[notification.kind];
   if (!headline) throw new MonitorError("invalid_notification_kind");
+  const link = previewUrl(event.url);
+  if (!link) throw new MonitorError("unsupported_preview_link");
   const window = ["reset", "banked-available", "boost"].includes(notification.kind) ? null : event.window;
   const time = window
     ? event.window.kind === "deadline"
@@ -35,13 +37,12 @@ export function buildDiscordContent(event, notification) {
         ? `**예상 시각(KST)**: ${formatKst(event.window.targetAt, true)} 부근 · 구간 ${formatKst(event.window.startAt, true)} ~ ${formatKst(event.window.endAt, true)}`
         : `**예상 구간(KST)**: ${formatKst(event.window.startAt, true)} ~ ${formatKst(event.window.endAt, true)}`
     : `**발표 시각(KST)**: ${formatKst(event.announcedAt)}${notification.rank < 1 ? " · 적용 시각 미정" : ""}`;
-  return [headline, time,
-    `출처: https://codex-reset.com/ · ${previewUrl(event.url)}`].join("\n");
+  return [headline, time, link].join("\n");
 }
 
 export function buildDiscordTestContent(now) {
   return ["🧪 **Codex 알림 연결 시험 — 실제 리셋 아님**",
-    `**시험 시각(KST)**: ${formatKst(now)}`, "출처: https://codex-reset.com/"].join("\n");
+    `**시험 시각(KST)**: ${formatKst(now)}`, "https://fixupx.com/thsottiaux/status/2098685367058612394"].join("\n");
 }
 
 export function discordUrl(env) {
