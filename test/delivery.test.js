@@ -47,7 +47,7 @@ test("bootstrap announces a currently open promise older than one hour, but not 
   await h.run(); assert.equal(h.posts.length, 1);
 });
 
-test("held production predicts the exact new promise and banked messages without changing real state", async () => {
+test("held production suppresses a superseded promise without changing real state", async () => {
   const h = harness({ ALERTS_HELD: "true" });
   await h.storage.put("initialized", { at: NOW - 2 * 86_400_000 });
   const promisedAt = NOW - 3_600_000;
@@ -61,18 +61,17 @@ test("held production predicts the exact new promise and banked messages without
   const projected = await h.service.previewHeldDelivery();
   assert.equal(projected.held, true);
   assert.equal(projected.notifications, 0);
-  assert.deepEqual(projected.expected.map((item) => item.kind), ["reset-watch", "banked-sign"]);
-  assert.match(projected.expected[0].content, /Tibo가 약속한/);
-  assert.match(projected.expected[1].content, /지급 미확인/);
+  assert.deepEqual(projected.expected.map((item) => item.kind), ["banked-sign"]);
+  assert.match(projected.expected[0].content, /지급 미확인/);
   assert.deepEqual(h.posts, []);
   assert.equal(JSON.stringify([...h.storage.data]), before, "held Cron must not advance receipts, head or cursors");
   h.now += 60_001;
   const delivered = await h.service.poll();
-  assert.equal(delivered.notifications, 2);
+  assert.equal(delivered.notifications, 1);
   assert.deepEqual(h.posts, projected.expected.map((item) => item.content), "released messages match the review preview");
 });
 
-test("0.8 receipt and rank remain valid while an existing unannounced record gains its first watch", async () => {
+test("0.8 receipt is preserved while an older unannounced record is suppressed", async () => {
   const h = harness();
   await h.storage.put("initialized", { at: NOW - 86_400_000 });
   await h.storage.put("event:1", { id: "1", group: "reset", announcedAt: NOW - 60_000, rank: 1, highestOffered: 1,
@@ -81,8 +80,7 @@ test("0.8 receipt and rank remain valid while an existing unannounced record gai
     rank: 0, highestOffered: 0, deliveries: {}, baseline: true });
   h.forecast.official_signal = promise("100");
   await h.run([rawEvent("1")]);
-  assert.equal(h.posts.length, 1);
-  assert.match(h.posts[0], /status\/100$/);
+  assert.equal(h.posts.length, 0);
   assert.equal((await h.storage.get("event:1")).deliveries.reset.messageId, "old-message");
 });
 

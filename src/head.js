@@ -1,5 +1,11 @@
 export const HEAD_KEY = "source_head:v1";
 
+// Derive a shared cursor from existing per-kind positions without resetting receipts.
+export function latestPosition(head) {
+  return Object.values(head).reduce((latest, position) =>
+    comparePosition(position, latest) > 0 ? position : latest, undefined);
+}
+
 export function comparePosition(left, right) {
   if (!right) return 1;
   if (left.announcedAt !== right.announcedAt) return left.announcedAt < right.announcedAt ? -1 : 1;

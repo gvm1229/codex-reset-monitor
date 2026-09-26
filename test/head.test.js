@@ -31,7 +31,7 @@ test("head uses publication time then opaque ID, not a numeric maximum", () => {
   assert.equal(comparePosition({ id: "a", announcedAt: NOW }, later), 0);
 });
 
-test("an active Tibo commitment alerts despite an older ID and no precise window", async () => {
+test("an old active commitment cannot bypass the latest processed head", async () => {
   const h = fixture();
   await h.storage.put("initialized", { at: NOW - 10 * 60_000 });
   await h.storage.put(HEAD_KEY, { "reset-watch": { id: "900", announcedAt: NOW - 60_000 } });
@@ -39,11 +39,11 @@ test("an active Tibo commitment alerts despite an older ID and no precise window
   h.forecast = { official_signal: { tweet_id: "100", kind: "signal", signal_type: "plain_commitment", at,
     url: "https://x.com/thsottiaux/status/100" } };
   const first = await h.run([]);
-  assert.equal(first.notifications, 1);
-  assert.equal(h.posts.length, 1);
-  assert.equal((await h.storage.get("event:100")).deliveries["reset-watch"].status, "sent");
+  assert.equal(first.notifications, 0);
+  assert.equal(first.skipped.before_source_head, 1);
+  assert.equal(h.posts.length, 0);
   await h.run([]);
-  assert.equal(h.posts.length, 1, "repeating the same commitment must not replay");
+  assert.equal(h.posts.length, 0, "repeating the same commitment must not replay");
   assert.equal((await h.storage.get(HEAD_KEY))["reset-watch"].id, "900", "older active evidence cannot move the head backward");
 });
 
@@ -103,9 +103,46 @@ test("migration reconstructs 0.8 heads without erasing receipts, keeping stages 
     "banked-arriving": { id: "700", announcedAt: NOW - 60_000 },
   });
   await h.run([rawEvent("200", { announced_at: new Date(NOW - 90_000).toISOString() })]);
-  assert.equal(h.posts.length, 1, "a later hint does not suppress a newer confirmed reset");
+  assert.equal(h.posts.length, 0, "a different stage cannot bypass the latest processed publication");
   assert.equal((await h.storage.get("event:100")).deliveries.reset.messageId, "old");
   assert.equal((await h.storage.get(HEAD_KEY)).reset.id, "200");
+});
+
+test("September 23 known banked promotion cannot bypass September 26 reset head", async () => {
+  const h = fixture();
+  h.now = Date.parse("2026-09-26T12:00:00Z");
+  const oldAt = Date.parse("2026-09-22T18:23:37Z");
+  const newAt = Date.parse("2026-09-26T00:07:13Z");
+  const oldId = "2102463847714247142", newId = "2103637477760311522";
+  await h.storage.put("initialized", { at: Date.parse("2026-09-20T21:19:00Z") });
+  await h.storage.put(HEAD_KEY, { reset: { id: newId, announcedAt: newAt },
+    "banked-sign": { id: oldId, announcedAt: oldAt } });
+  await h.storage.put(`event:${oldId}`, { id: oldId, group: "credits", announcedAt: oldAt,
+    rank: 0.25, highestOffered: 0.25, seenKeys: ["banked-sign"],
+    deliveries: { "banked-sign": { status: "sent", messageId: "original-receipt" } } });
+  const headBefore = await h.storage.get(HEAD_KEY);
+  const result = await h.run([rawEvent(oldId, { group: "credits", banked_state: "arriving",
+    announced_at: new Date(oldAt).toISOString() })]);
+  assert.equal(result.notifications, 0);
+  assert.equal(result.skipped.before_source_head, 1);
+  assert.equal(h.posts.length, 0);
+  assert.deepEqual((await h.storage.get(HEAD_KEY)).reset, headBefore.reset);
+  assert.equal((await h.storage.get(`event:${oldId}`)).deliveries["banked-sign"].messageId, "original-receipt");
+  await h.run();
+  assert.equal(h.posts.length, 0);
+});
+
+test("a known old reset confirmation is suppressed while the latest ID can progress", async () => {
+  const h = fixture();
+  await h.run([]);
+  await h.run([rawEvent("100", { announcement_state: "none" })]);
+  await h.run([rawEvent("200", { announcement_state: "none", announced_at: new Date(NOW).toISOString() })]);
+  const before = h.posts.length;
+  const result = await h.run([rawEvent("100"), rawEvent("200", { announced_at: new Date(NOW).toISOString() })]);
+  assert.equal(result.skipped.before_source_head, 1);
+  assert.equal(h.posts.length, before + 1);
+  assert.equal((await h.storage.get("event:200")).deliveries.reset.status, "sent");
+  assert.equal((await h.storage.get("event:100")).deliveries.reset, undefined);
 });
 
 test("a partial Discord run advances only through fully processed events", async () => {

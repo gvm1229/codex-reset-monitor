@@ -3,7 +3,7 @@ import { fetchSnapshot } from "./source.js";
 import { buildDiscordContent, buildDiscordTestContent, discordUrl, previewUrl, sendDiscord } from "./discord.js";
 import { MonitorError, safeFailure } from "./http.js";
 import { MONITOR_VERSION } from "./version.js";
-import { HEAD_KEY, advanceHead, comparePosition, headFromRecords } from "./head.js";
+import { HEAD_KEY, advanceHead, comparePosition, headFromRecords, latestPosition } from "./head.js";
 
 const eventKey = (id) => `event:${id}`;
 const DELETED = Symbol("dry-run-delete");
@@ -155,6 +155,7 @@ export class MonitorService {
       });
     }
     const oldHead = structuredClone(head);
+    const latestHead = latestPosition(oldHead);
     const candidateHead = structuredClone(head);
     const canAdvanceHead = snapshot.invalid === 0 && snapshot.conflicts === 0;
     const result = { ...overview, ...(seeded ? { initialized: true } : {}), notifications: 0, wouldNotify: 0,
@@ -196,6 +197,10 @@ export class MonitorService {
       const freshness = event.announcedAt > now + 60_000 ? "future_announcement"
         : event.activeSignal && !active ? "expired_signal"
         : event.window && notification.rank < 1 && event.window.endAt <= now ? "expired_signal"
+        // Only bootstrap may announce older active promises. Once running, a
+        // known ID or a different stage must not bypass the shared source cursor.
+        : !(seeded && active) && latestHead && position.id !== latestHead.id &&
+          comparePosition(position, latestHead) <= 0 ? "before_source_head"
         : !wasKnown && !active && comparePosition(position, oldHead[notification.kind]) <= 0 ? "before_source_head"
         : (!wasKnown || (!record.seenKeys && record.rank === 0 && notification.rank < 1)) && !active &&
           Math.min(record.announcedAt, event.announcedAt) < initialized.at - ONE_HOUR_MS ? "historical_backfill" : null;

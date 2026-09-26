@@ -15,6 +15,7 @@
 | 0.7 | `we have now reset usage` 누락 수정, 축약형·시제·오탐 방어와 판정 사유 로그 | `MISSED_RESET_2026_08_31_PLAN.md`, 이번 소스 변경 |
 | 0.8 | codex-reset.com API로 교체, X·문장 판정 제거, 발표 시각 표시, Durable Object 순차 전송 | 사용자 승인 운영 적용 완료; `verification/0.8-production.md` |
 | 0.9 | forecast·feed 추가, 약한 신호·공식 예고·unknown 리셋권, 시간 구간·마감 변경 알림, 단계별 확인 위치로 과거 사건 재출현 방지 | 사용자 승인 운영 적용; `verification/0.9-production.md` |
+| 0.10 | 전체 최신 확인 위치로 오래된 기존 ID·다른 알림 단계의 뒤늦은 재출현 차단 | 2026-09-26 사용자 승인 운영 적용; `verification/0.10-head-replay.md` |
 
 ## 0.9 신호 확대 후보 — 2026-09-23
 
